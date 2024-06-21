@@ -1,63 +1,80 @@
 import requests
-from datetime import datetime
 from tabulate import tabulate
+import json
 
-# Function to fetch stock details for a given symbol
-def fetch_stock_details(symbol):
-    url = "https://real-time-finance-data.p.rapidapi.com/stock-overview"
-    querystring = {"symbol": symbol, "language": "en"}
+# Function to fetch stock time series data for a symbol
+def fetch_stock_data(symbol):
+    url = "https://twelve-data1.p.rapidapi.com/time_series"
+    querystring = {
+        "symbol": symbol,
+        "interval": "1day",
+        "outputsize": "1",
+        "format": "json"
+    }
     headers = {
         "x-rapidapi-key": "709ec67693msh579df1437015176p131167jsn0cabe74a07de",
-        "x-rapidapi-host": "real-time-finance-data.p.rapidapi.com"
+        "x-rapidapi-host": "twelve-data1.p.rapidapi.com"
     }
-    response = requests.get(url, headers=headers, params=querystring)
-    if response.status_code == 200:
-        try:
-            data = response.json()['data']
-            stock_details = {
-                "Symbol": data['symbol'],
-                "Name": data['name'],
-                "Date": datetime.strptime(data['last_update_utc'], '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d'),
-                "Open Price": f"{data['open']} USD",
-                "High Value": f"{data['high']} USD",
-                "Low Value": f"{data['low']} USD",
-                "Previous Close": f"{data['previous_close']} USD",
-                "Volume": f"{data['volume']}",
-                "Market Cap": f"{data['company_market_cap']} USD",
-                "Exchange": f"{data['exchange']} ({data['primary_exchange']})",
-                "Currency": f"{data['currency']}"
-            }
-            return stock_details
-        except KeyError:
-            print(f"Error: Required data fields not found for symbol {symbol}")
-    else:
-        print(f"Error: Unable to fetch data for symbol {symbol} (Status code: {response.status_code})")
 
-# List of top 17 stocks from Indian market (example)
-top_stocks = [
-    "INFY", "RELIANCE", "TCS", "HDFC", "HDFCBANK",
-    "ICICIBANK", "HINDUNILVR", "ITC", "SBI", "BAJFINANCE",
-    "AXISBANK", "MARUTI", "KOTAKBANK", "ONGC", "LT",
-    "NTPC", "INDUSINDBK"
+    response = requests.get(url, headers=headers, params=querystring)
+    return response.json()
+
+# Function to fetch stock overview data for a symbol
+def fetch_stock_overview(symbol):
+    url = "https://twelve-data1.p.rapidapi.com/quote"
+    querystring = {"symbol": symbol}
+    headers = {
+        "x-rapidapi-key": "709ec67693msh579df1437015176p131167jsn0cabe74a07de",
+        "x-rapidapi-host": "twelve-data1.p.rapidapi.com"
+    }
+
+    response = requests.get(url, headers=headers, params=querystring)
+    return response.json()
+
+# List of top 17 Indian stocks
+indian_stocks = [
+    "INFY", "TCS", "HDFC", "HDFCBANK", "RELIANCE", 
+    "ICICIBANK", "ITC", "AXISBANK", "SBIN", "KOTAKBANK", 
+    "ONGC", "LT", "IOC", "HINDUNILVR", "NTPC", "SUNPHARMA", "BAJFINANCE"
 ]
 
-def main():
-    stock_details_all = []
-    for symbol in top_stocks:
-        stock_details = fetch_stock_details(symbol)
-        if stock_details:
-            stock_details_all.append(stock_details)
+# Fetch and store data for each stock
+for symbol in indian_stocks:
+    print(f"\nFetching data for {symbol}...")
+    stock_data = fetch_stock_data(symbol)
+    stock_overview = fetch_stock_overview(symbol)
 
-    # Display all fetched stock details in a tabular format
-    if stock_details_all:
-        print("\nStock Details for Top 17 Indian Stocks:\n")
-        headers = ["Symbol", "Name", "Date", "Open Price", "High Value", "Low Value", "Previous Close", "Volume", "Market Cap", "Exchange", "Currency"]
-        data_rows = [[
-            stock['Symbol'], stock['Name'], stock['Date'], stock['Open Price'], stock['High Value'],
-            stock['Low Value'], stock['Previous Close'], stock['Volume'], stock['Market Cap'],
-            stock['Exchange'], stock['Currency']
-        ] for stock in stock_details_all]
-        print(tabulate(data_rows, headers=headers, tablefmt="fancy_grid"))
+    # Check if data is fetched successfully
+    if "values" in stock_data:
+        latest_data = stock_data["values"][0]
+        stock_data_table = [
+            ["Date", latest_data["datetime"]],
+            ["Open Price", f"{latest_data['open']} USD"],
+            ["Close Price", f"{latest_data['close']} USD"],
+            ["High Price", f"{latest_data['high']} USD"],
+            ["Low Price", f"{latest_data['low']} USD"]
+        ]
 
-if __name__ == "__main__":
-    main()
+        # Store data in a JSON file for each symbol
+        filename = f"{symbol}_stock_data.json"
+        with open(filename, 'w') as file:
+            json.dump(stock_data_table, file, indent=4)
+
+        print(f"Stock Time Series Data for {symbol} stored in {filename}")
+    else:
+        print(f"Error fetching stock time series data for {symbol}")
+        print(stock_data)
+
+# Print a summary table for all stocks
+summary_table = []
+for symbol in indian_stocks:
+    filename = f"{symbol}_stock_data.json"
+    try:
+        with open(filename, 'r') as file:
+            data = json.load(file)
+            summary_table.append([symbol, data[0][1], data[1][1], data[2][1], data[3][1]])
+    except FileNotFoundError:
+        print(f"File {filename} not found. Skipping summary entry.")
+
+print("\nSummary of Stock Time Series Data:")
+print(tabulate(summary_table, headers=["Symbol", "Date", "Open Price", "Close Price", "High Price"], tablefmt="fancy_grid"))
