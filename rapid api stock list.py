@@ -1,11 +1,14 @@
 import requests
-import csv
+from pymongo import MongoClient
 
 # Your Twelve Data API key
 API_KEY = '739e405083604c21967dc03d85875f02'
 
 # API endpoint for stock list from NSE or BSE
 BASE_URL = 'https://api.twelvedata.com/stocks'
+
+# MongoDB connection URI
+MONGO_URI = 'mongodb://localhost:27017/'
 
 def get_stock_list(exchange):
     params = {
@@ -22,29 +25,35 @@ def get_stock_list(exchange):
         print(f"Error: Unable to fetch data (Status code: {response.status_code})")
         return None
 
-def save_to_csv(filename, stock_data, exchange):
-    with open(filename, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Symbol", "Name", "Exchange"])
-        for stock in stock_data.get('data', []):
-            writer.writerow([stock['symbol'], stock['name'], exchange])
+def save_to_mongodb(collection, stock_data, exchange):
+    if stock_data and 'data' in stock_data:
+        for stock in stock_data['data']:
+            stock['exchange'] = exchange
+        collection.insert_many(stock_data['data'])
 
 def main():
+    # Connect to MongoDB
+    client = MongoClient(MONGO_URI)
+    db = client['indian_stock_list']
+    
     # Get stock list for NSE
     nse_stocks = get_stock_list('NSE')
     if nse_stocks:
-        print("NSE Stock List:")
-        for stock in nse_stocks.get('data', []):
-            print(f"{stock['symbol']}: {stock['name']}")
-        save_to_csv('nse_stocks.csv', nse_stocks, 'NSE')
+        print("Saving NSE Stock List to MongoDB...")
+        nse_collection = db['nse_stocks']
+        save_to_mongodb(nse_collection, nse_stocks, 'NSE')
+        print("NSE Stock List saved.")
     
     # Get stock list for BSE
     bse_stocks = get_stock_list('BSE')
     if bse_stocks:
-        print("\nBSE Stock List:")
-        for stock in bse_stocks.get('data', []):
-            print(f"{stock['symbol']}: {stock['name']}")
-        save_to_csv('bse_stocks.csv', bse_stocks, 'BSE')
+        print("Saving BSE Stock List to MongoDB...")
+        bse_collection = db['bse_stocks']
+        save_to_mongodb(bse_collection, bse_stocks, 'BSE')
+        print("BSE Stock List saved.")
+
+    # Close MongoDB connection
+    client.close()
 
 if __name__ == '__main__':
     main()
