@@ -1,0 +1,92 @@
+import requests
+from pymongo import MongoClient
+
+# Twelve Data API key
+TWELVE_DATA_API_KEY = '739e405083604c21967dc03d85875f02'
+
+# RapidAPI key
+RAPIDAPI_KEY = '08a4abe5c8msh19d496447b1032ap13e31ajsn284601dcd0d7'
+
+# API endpoint for stock list from NSE or BSE
+TWELVE_DATA_BASE_URL = 'https://api.twelvedata.com/stocks'
+RAPIDAPI_BASE_URL = 'https://real-time-finance-data.p.rapidapi.com/currency-time-series'
+
+# MongoDB connection URI
+MONGO_URI = 'mongodb://localhost:27017/'
+
+def get_stock_list(exchange):
+    params = {
+        'exchange': exchange,
+        'apikey': TWELVE_DATA_API_KEY
+    }
+    
+    response = requests.get(TWELVE_DATA_BASE_URL, params=params)
+    
+    if response.status_code == 200:
+        stock_data = response.json()
+        return stock_data
+    else:
+        print(f"Error: Unable to fetch data (Status code: {response.status_code})")
+        return None
+
+def get_currency_time_series(from_symbol, to_symbol, period='1D', language='en'):
+    headers = {
+        'x-rapidapi-host': 'real-time-finance-data.p.rapidapi.com',
+        'x-rapidapi-key': RAPIDAPI_KEY
+    }
+    params = {
+        'from_symbol': from_symbol,
+        'to_symbol': to_symbol,
+        'period': period,
+        'language': language
+    }
+    
+    response = requests.get(RAPIDAPI_BASE_URL, headers=headers, params=params)
+    
+    if response.status_code == 200:
+        currency_data = response.json()
+        return currency_data
+    else:
+        print(f"Error: Unable to fetch data (Status code: {response.status_code})")
+        return None
+
+def save_to_mongodb(collection, data, key_name):
+    if data and 'data' in data:
+        for item in data['data']:
+            item['key_name'] = key_name
+        collection.insert_many(data['data'])
+
+def main():
+    # Connect to MongoDB
+    client = MongoClient(MONGO_URI)
+    db = client['indian_stock_list']
+    
+    # Get stock list for NSE
+    nse_stocks = get_stock_list('NSE')
+    if nse_stocks:
+        print("Saving NSE Stock List to MongoDB...")
+        nse_collection = db['nse_stocks']
+        save_to_mongodb(nse_collection, nse_stocks, 'NSE')
+        print("NSE Stock List saved.")
+    
+    # Get stock list for BSE
+    bse_stocks = get_stock_list('BSE')
+    if bse_stocks:
+        print("Saving BSE Stock List to MongoDB...")
+        bse_collection = db['bse_stocks']
+        save_to_mongodb(bse_collection, bse_stocks, 'BSE')
+        print("BSE Stock List saved.")
+
+    # Get currency time series data for USD to EUR
+    currency_data = get_currency_time_series('USD', 'EUR')
+    if currency_data:
+        print("Saving Currency Time Series Data to MongoDB...")
+        currency_collection = db['currency_time_series']
+        save_to_mongodb(currency_collection, currency_data, 'USD_EUR')
+        print("Currency Time Series Data saved.")
+
+    # Close MongoDB connection
+    client.close()
+
+if __name__ == '__main__':
+    main()
